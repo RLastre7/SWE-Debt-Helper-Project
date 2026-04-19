@@ -37,8 +37,9 @@ class ImportService:
         return debts
 
     #imports from csv and saves to db in one function
-    def import_csv_to_db(self,user_id:int ,csv_path: str):
+    def import_csv_to_db(self,user_id:int ,csv_path: str) -> list[Debt]:
         debts = self.import_debts_from_csv(csv_path)
         for debt in debts:
             self.db.add_debt(user_id,debt)
+        return debts
 
