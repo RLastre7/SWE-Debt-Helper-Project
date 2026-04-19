@@ -1,5 +1,5 @@
 import sqlite3
-from data_importing.csv_importer import *
+from data_importing.importing import *
 from debt import *
 from db import *
 
@@ -7,22 +7,18 @@ from db import *
 if __name__ == "__main__":
     #create connection to db (making a temperary file for testing purposes)
     db:DatabaseManager = DatabaseManager(":memory:")
+    importer:ImportService = ImportService(db)
+    
     #create table
     db.initialize_schema()
-    userId = db.create_user("test_user", "password123")
-
-    #read data
-    debts = read_csv("debt_test_data.csv")
+    user_id = db.create_user("test_user", "password123")
     
-    #save debts to db table
-    for d in debts:
-        db.add_debt(userId,d.account_type, d.balance, d.interest, d.min_payment, d.due_date)
+    #read data from csv and save to table
+    importer.import_csv_to_db(user_id,"debt_test_data.csv")
     
     #get data from table
     print("Getting all the debts in the table")
-    # table_debts = get_all_debts(conn)
-
     #from the list of the debts print the summary
-    user_debts = db.get_debts_by_user(userId)
+    user_debts = db.get_debts_for_user(user_id)
     for debt in user_debts:
-        print(debt.summary())
+        print(debt)
