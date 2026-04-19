@@ -67,6 +67,20 @@ class DatabaseManager:
             row = conn.execute("SELECT * FROM user WHERE username = ?", (username,)).fetchone()
             return dict(row) if row else None
 
+    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM user WHERE user_id = ?", (user_id,)).fetchone()
+            return dict(row) if row else None
+
+    def update_user_preferences(self, user_id: int, preferred_strategy: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE user SET preferred_strategy = ? WHERE user_id = ?",
+                (preferred_strategy, user_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
     def add_debt(self, user_id: int, creditor_name: str, current_balance: float,
                 interest_rate: float, minimum_payment: float, due_date: str) -> int:
         with self._connect() as conn:
