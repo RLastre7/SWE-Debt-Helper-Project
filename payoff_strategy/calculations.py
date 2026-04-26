@@ -5,16 +5,15 @@ class CalculationService:
     def get_totals(self, user_id: int) -> dict:
         debts = self.db.get_debts_for_user(user_id)
 
-    total_debt = sum(d["current_balance"] for d in debts)
-    total_min_payment = sum(d["minimum_payment"] for d in debts)
+        total_debt = sum(d["current_balance"] for d in debts)
+        total_min_payment = sum(d["minimum_payment"] for d in debts)
 
-    return{
-        "total_debt": total_debt,
-        "total_min_payment": total_min_payment,
-        "num_debts": len(debts),
-    }
+        return {
+            "total_debt": total_debt,
+            "total_min_payment": total_min_payment,
+            "num_debts": len(debts),
+        }
         
-    
 
     def compare_strategies_simple(self, user_id: int) -> str:
         debts = self.db.get_debts_for_user(user_id)
