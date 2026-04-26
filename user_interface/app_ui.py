@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 from db import DatabaseManager
+from debt import Debt
 from user_accounts.accounts import AccountsService
 from payoff_strategy.calculations import CalculationService
 from data_importing.importing import ImportService
@@ -17,11 +18,12 @@ class DebtHelperUI:
         self.db = DatabaseManager("debt_helper.db")
         self.db.initialize_schema()
 
-        # Other modules (might be stubs right now)
+        # Modules
         self.accounts = AccountsService(self.db)
         self.calcs = CalculationService(self.db)
         self.importer = ImportService(self.db)
 
+        # Session state
         self.current_user_id = None
 
         # Screen container
@@ -44,6 +46,17 @@ class DebtHelperUI:
 
     def run(self):
         self.root.mainloop()
+
+
+def _extract_user_id(user_record) -> int:
+    # AccountsService.login returns a user record (dict or object).
+    if isinstance(user_record, dict):
+        return int(user_record["user_id"])
+    if hasattr(user_record, "user_id"):
+        return int(user_record.user_id)
+    if isinstance(user_record, (tuple, list)) and len(user_record) > 0:
+        return int(user_record[0])
+    raise TypeError("Could not extract user_id from login result.")
 
 
 class LoginFrame(ttk.Frame):
@@ -81,16 +94,21 @@ class LoginFrame(ttk.Frame):
             return
 
         try:
-            user_id = self.app.accounts.login(u, p)
-        except NotImplementedError:
-            messagebox.showinfo("Not Ready", "Login module not implemented yet.")
+            user = self.app.accounts.login(u, p)
+        except Exception as e:
+            self.status.config(text=str(e))
             return
 
-        if user_id is None:
+        if user is None:
             self.status.config(text="Invalid username or password.")
             return
 
-        self.app.current_user_id = user_id
+        try:
+            self.app.current_user_id = _extract_user_id(user)
+        except Exception:
+            self.status.config(text="Login succeeded but user_id could not be read.")
+            return
+
         self.status.config(text="")
         self.app.show("DashboardFrame")
 
@@ -103,8 +121,8 @@ class LoginFrame(ttk.Frame):
 
         try:
             ok = self.app.accounts.create_account(u, p)
-        except NotImplementedError:
-            messagebox.showinfo("Not Ready", "Create account module not implemented yet.")
+        except Exception as e:
+            self.status.config(text=str(e))
             return
 
         if not ok:
@@ -144,15 +162,13 @@ class DashboardFrame(ttk.Frame):
             self.app.show("LoginFrame")
             return
 
-        # Update totals if calc module exists
         try:
             totals = self.app.calcs.get_totals(self.app.current_user_id)
             self.total_debt_label.config(text=f"Total Debt: ${totals['total_debt']:.2f}")
             self.total_min_label.config(text=f"Total Min Payments: ${totals['total_min_payment']:.2f} / month")
-        except NotImplementedError:
-            # Keep placeholders if not ready
-            self.total_debt_label.config(text="Total Debt: (not calculated yet)")
-            self.total_min_label.config(text="Total Min Payments: (not calculated yet)")
+        except Exception:
+            self.total_debt_label.config(text="Total Debt: (error)")
+            self.total_min_label.config(text="Total Min Payments: (error)")
 
     def logout(self):
         self.app.current_user_id = None
@@ -167,11 +183,9 @@ class DashboardFrame(ttk.Frame):
             return
 
         try:
-            count = self.app.importer.import_debts_from_csv(self.app.current_user_id, path)
-            messagebox.showinfo("Import Complete", f"Imported {count} debts.")
+            debts = self.app.importer.import_csv_to_db(self.app.current_user_id, path)
+            messagebox.showinfo("Import Complete", f"Imported {len(debts)} debts.")
             self.on_show()
-        except NotImplementedError:
-            messagebox.showinfo("Not Ready", "Import module not implemented yet.")
         except Exception as e:
             messagebox.showerror("Import Error", str(e))
 
@@ -182,8 +196,8 @@ class DashboardFrame(ttk.Frame):
         try:
             summary = self.app.calcs.compare_strategies_simple(self.app.current_user_id)
             messagebox.showinfo("Strategy Summary", summary)
-        except NotImplementedError:
-            messagebox.showinfo("Not Ready", "Payoff strategy module not implemented yet.")
+        except Exception as e:
+            messagebox.showerror("Strategy Error", str(e))
 
 
 class DebtManagementFrame(ttk.Frame):
@@ -215,10 +229,6 @@ class DebtManagementFrame(ttk.Frame):
         ttk.Button(btns, text="Add Dummy Debt (temp)", command=self.add_dummy).grid(row=0, column=0, padx=8)
         ttk.Button(btns, text="Refresh", command=self.refresh).grid(row=0, column=1, padx=8)
 
-        # Placeholder buttons for later
-        ttk.Button(btns, text="Edit Selected (later)", state="disabled").grid(row=0, column=2, padx=8)
-        ttk.Button(btns, text="Delete Selected (later)", state="disabled").grid(row=0, column=3, padx=8)
-
     def on_show(self):
         self.refresh()
 
@@ -246,13 +256,15 @@ class DebtManagementFrame(ttk.Frame):
         if self.app.current_user_id is None:
             return
 
-        # Safe for you to do: calls shared db layer
-        self.app.db.add_debt(
-            user_id=self.app.current_user_id,
-            creditor_name="Demo Credit Card",
-            current_balance=1200.00,
-            interest_rate=24.99,
-            minimum_payment=35.00,
-            due_date="2026-04-30",
-        )
-        self.refresh()
+        try:
+            demo = Debt(
+                creditor_name="Demo Credit Card",
+                current_balance=1200.00,
+                interest_rate=24.99,
+                minimum_payment=35.00,
+                due_date="2026-04-30",
+            )
+            self.app.db.add_debt(self.app.current_user_id, demo)
+            self.refresh()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
